@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, provide, reactive, ref, watch } from 'vue'
 import axios from 'axios'
 import Header from './components/Header.vue'
 import CardList from './components/CardList.vue'
@@ -10,6 +10,9 @@ interface Sneaker {
   title: string
   imageUrl: string
   price: number
+  isFavorite?: boolean
+  favoriteId?: number  // ID записи в favorites
+  isAdded?: boolean
 }
 
 const items = ref<Sneaker[]>([])
@@ -22,11 +25,6 @@ const filters = reactive({
 const onChangeSelect = (event: Event) => {
   const target = event.target as HTMLSelectElement
   filters.sortBy = target.value
-}
-
-const onChangeSearchInput = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  filters.searchQuery = target.value
 }
 
 const fetchItems = async () => {
@@ -43,14 +41,72 @@ const fetchItems = async () => {
       'https://de8fff53e0466791.mokky.dev/items',
       { params }
     )
-    items.value = data
+
+    // Добавляем дефолтные поля
+    items.value = data.map(item => ({
+      ...item,
+      isFavorite: false,
+      isAdded: false,
+    }))
   } catch (err) {
     console.error('Ошибка загрузки товаров:', err)
   }
 }
 
-onMounted(fetchItems)
+const fetchFavorites = async () => {
+  try {
+    const { data: favorites } = await axios.get<any[]>(
+      'https://de8fff53e0466791.mokky.dev/favorites'
+    )
+
+    items.value = items.value.map(item => {
+      const favorite = favorites.find(f => f.parentId === item.id)
+      if (favorite) {
+        return {
+          ...item,
+          isFavorite: true,
+          favoriteId: favorite.id
+        }
+      }
+      return item
+    })
+  } catch (err) {
+    console.error('Ошибка загрузки избранного:', err)
+  }
+}
+
+const addToFavorite = async (item: Sneaker) => {
+  if (item.isFavorite) {
+    // Удалить из избранного
+    try {
+      await axios.delete(`https://de8fff53e0466791.mokky.dev/favorites/${item.favoriteId}`)
+      item.isFavorite = false
+      item.favoriteId = undefined
+    } catch (err) {
+      console.error('Ошибка удаления из избранного:', err)
+    }
+  } else {
+    // Добавить в избранное
+    try {
+      const { data } = await axios.post('https://de8fff53e0466791.mokky.dev/favorites', {
+        parentId: item.id,
+      })
+      item.isFavorite = true
+      item.favoriteId = data.id
+    } catch (err) {
+      console.error('Ошибка добавления в избранное:', err)
+    }
+  }
+}
+
+onMounted(async () => {
+  await fetchItems()
+  await fetchFavorites()
+})
+
 watch(filters, fetchItems, { deep: true })
+
+provide('addToFavorite', addToFavorite)
 </script>
 
 <template>
@@ -75,8 +131,7 @@ watch(filters, fetchItems, { deep: true })
           <div class="relative">
             <img class="absolute left-4 top-3 w-5" src="/search.svg" alt="Поиск" />
             <input
-              @input="onChangeSearchInput"
-              :value="filters.searchQuery"
+              v-model="filters.searchQuery"
               class="border shadow-lg border-gray-300 rounded-lg py-2 pl-10 pr-4 outline-none focus:border-slate-400 w-64"
               type="text"
               placeholder="Поиск..."

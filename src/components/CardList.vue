@@ -1,25 +1,42 @@
 <script setup lang="ts">
-import Card from "./Card.vue";
+import { inject } from 'vue'
+import Card from './Card.vue'
 
-defineProps({
-  items: Array,
-});
+interface Sneaker {
+  id: number
+  title: string
+  imageUrl: string
+  price: number
+  isFavorite: boolean
+}
+
+const props = defineProps<{
+  items: Sneaker[]
+}>()
+
+const addToFavorite = inject<(item: Sneaker) => void>('addToFavorite')!
 
 const onClickAdd = () => {
-  alert("Добавить!");
-};
+  alert('Добавили в корзину!')
+}
+
+const handleFavorite = (item: Sneaker) => {
+  addToFavorite(item)
+}
 </script>
 
 <template>
-  <div class="grid grid-cols-4 gap-5">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
     <Card
       v-for="item in items"
       :key="item.id"
+      :id="item.id"
       :imageUrl="item.imageUrl"
       :title="item.title"
       :price="item.price"
-      :isFavorite="false"
-      :onClickAdd="onClickAdd"
+      :isFavorite="item.isFavorite"
+      @clickAdd="onClickAdd"
+      @clickFavorite="() => handleFavorite(item)" 
     />
   </div>
 </template>
